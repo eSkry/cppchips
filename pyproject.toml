@@ -1,8 +1,9 @@
 [project]
+version = "0.0.1"
 name = "cppchips"
 authors = [
     { name="Leonov Arthur", email="depish.eskry@yandex.ru" }
-}
+]
 description = "Fast C++ Code Generation"
 readme = "README.md"
 requires-python = ">=3.7"

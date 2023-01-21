@@ -1,1 +1,4 @@
 *.cpp
+*/__pycache__
+src/cppchips.egg-info
+dist

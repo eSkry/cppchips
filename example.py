@@ -4,10 +4,17 @@ from src.CppFunction import CppFunction
 from src.CppVariable import CppVariable
 from src.CppClass import CppClass
 
-print(CppType('int', description="hhh", reference=True))
-print(CppType('int', pointer=True))
-print(CppType('int', const=True, pointer=True))
-print(CppBaseTypes.CppDouble())
+
+# CppType
+cppType1 = CppType('MyClassName', const=True)
+print(cppType1) # const MyClassName
+cppType1.is_pointer = True
+print(cppType1) # const MyClassName*
+
+
+# CppVariable
+cppVar = CppVariable(cppType1, 'myVar', value="fdsf")
+print(cppVar) # const MyClassName* myVar = fdsf
 
 
 print(CppFunction('HelloFunction'
