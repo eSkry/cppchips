@@ -1,5 +1,11 @@
 
 
+MEMBER_PREFIX='m'
+ARGUMENT_PREFIX='a'
+GETTER_PREFIX="get"
+SETTER_PREFIX="set"
+
+
 class CppType:
 
     def __init__(self, name: str, description=None, const=False, reference=False, pointer=False, rvalue_ref=False):
@@ -151,6 +157,15 @@ class CppVariable:
 
 
     @property
+    def name_on_args(self):
+        return f'{ARGUMENT_PREFIX}{self.name}'
+
+    @property
+    def name_on_clas(self):
+        return f'{MEMBER_PREFIX}{self.name}'
+
+
+    @property
     def type(self):
         return self._type
 
@@ -193,7 +208,7 @@ class CppVariable:
 class CppFunction:
     '''CppFunction - Клас который представляет собой функции и методы из C++'''
 
-    def __init__(self, name: str, ret_t: CppType, args=[], body=None, static=False, constexpr=False, noexcept=False):
+    def __init__(self, name: str, ret_t: CppType, args=[], body=None, static=False, constexpr=False, noexcept=False, const=False):
         self.name = name
         self.ret_t = ret_t
         self.args = args
@@ -201,36 +216,41 @@ class CppFunction:
         self.constexpr = constexpr
         self.body = body
         self.noexcept = noexcept
+        self.const = const
 
 
     def _get_arg_list(self) -> str:
         args = [str(x) for x in self.args]
         return ", ".join(args)
 
+
     def get_definition(self) -> str:
         '''get_definition - Определяет функцию вместе с ее телом'''
-        fdc_str = f"<static><constexpr>{str(self.ret_t)} {self.name}({self._get_arg_list()})<noexcept> {{\n<body>\n}}"
+        fdc_str = f"<static><constexpr>{str(self.ret_t)} {self.name}({self._get_arg_list()})<const><noexcept> {{\n<body>\n}}"
 
         fdc_str = fdc_str.replace("<static>", "static " if self.static else "")
         fdc_str = fdc_str.replace("<constexpr>", "constexpr " if self.constexpr else "")
         fdc_str = fdc_str.replace("<body>", self.body if self.body else "")
         fdc_str = fdc_str.replace("<noexcept>", " noexcept" if self.noexcept else "")
+        fdc_str = fdc_str.replace("<const>", " const" if self.const else "")
 
         return fdc_str
 
 
     def get_declaration(self) -> str:
-        fdf_str = f"<static><constexpr>{str(self.ret_t)} {self.name}({self._get_arg_list()})<noexcept>;"
+        fdf_str = f"<static><constexpr>{str(self.ret_t)} {self.name}({self._get_arg_list()})<const><noexcept>;"
 
         fdf_str = fdf_str.replace("<static>", "static " if self.static else "")
         fdf_str = fdf_str.replace("<constexpr>", "constexpr " if self.constexpr else "")
         fdf_str = fdf_str.replace("<noexcept>", " noexcept" if self.noexcept else "")
+        fdf_str = fdf_str.replace("<const>", " const" if self.const else "")
 
         return fdf_str
 
 
     def __str__(self) -> str:
         return self.get_definition()
+
 
 
 class CppConstructor(CppFunction):
@@ -334,6 +354,15 @@ class CppClass:
 
     def add_variable(self, var: CppClassVariable, scope="public"):
         self._scope[scope].variables.append(var)
+        if var.getter:
+            ret_const_ref_t = CppType(var.type._name, reference=True, const=True)
+            ret_ref_t = CppType(var.type._name, reference=True)
+            self.add_method(CppFunction(GETTER_PREFIX + var.name, ret_const_ref_t, body=f'return {var.name};', noexcept=True, const=True))
+            self.add_method(CppFunction(GETTER_PREFIX + var.name, ret_ref_t, body=f'return {var.name};', noexcept=True))
+        if var.setter:
+            set_ref_t = CppType(var.type._name, reference=True)
+            arg = CppVariable(set_ref_t, 'value')
+            self.add_method(CppFunction(SETTER_PREFIX + var.name, CppVoid(), [arg], f'this->{var.name} = {arg.name};'))
 
 
     def add_method(self, method: CppFunction, scope="public"):
@@ -418,12 +447,15 @@ class CppClass:
 
             # constructors
             class_str += "\n".join([constructor.get_definition().replace("<class_name>", self._name) for constructor in cur_scope.constructors])
+            class_str += '\n'
 
             # methods
             class_str += "\n".join([method.get_definition() for method in cur_scope.methods])
+            class_str += '\n'
 
             # variables
             class_str += "\n".join([variable.get_declaration() for variable in cur_scope.variables])
+            class_str += '\n'
 
 
         class_str += "\n};"
