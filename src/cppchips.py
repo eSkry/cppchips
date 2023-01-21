@@ -234,21 +234,38 @@ class CppFunction:
 
 
 class CppConstructor(CppFunction):
-    def __init__(self, args=[], body=None, constexpr=False, deleted=False, default=False):
+    def __init__(self, args=[], body=None, constexpr=False, deleted=False, default=False, initializer_list=[]):
         super().__init__('', CppNONE(), args, body, constexpr)
         self.deleted = deleted
         self.default = default
+        self.initializer_list = initializer_list
 
+    def arg_count(self):
+        return len(self.args)
 
     def get_definition(self) -> str:
         if self.deleted or self.default:
             return ""
 
-        fdc_str = f"<constexpr>{str(self.ret_t)} <class_name>({self._get_arg_list()})<noexcept> {{\n<body>\n}}"
+        fdc_str = f"<constexpr>{str(self.ret_t)} <class_name>({self._get_arg_list()})<noexcept> <initializer_list>{{\n<body>\n}}"
 
         fdc_str = fdc_str.replace("<constexpr>", "constexpr" if self.constexpr else "")
         fdc_str = fdc_str.replace("<body>", self.body if self.body else "")
         fdc_str = fdc_str.replace("<noexcept>", " noexcept" if self.noexcept else "")
+
+        if len(self.initializer_list) > 0:
+            init_list = " : "
+            # todo: Релазиовать инициализацию конструктора базового класса
+            init_strs = []
+            for arg in self.args:
+                if arg in self.initializer_list:
+                    init_strs.append(f'{arg.name}{{{arg.name}}}')
+
+            init_list += ", ".join(init_strs)
+
+            fdc_str = fdc_str.replace("<initializer_list>", init_list)
+        else:
+            fdc_str = fdc_str.replace("<initializer_list>", "")
 
         return fdc_str
 
@@ -264,21 +281,9 @@ class CppConstructor(CppFunction):
         return fdf_str
 
 
-
     def __str__(self) -> str:
         return self.get_definition()
 
-
-class CppClassScope:
-    def __init__(self) -> None:
-        self.methods = []
-        self.variables = []
-        self.constructors = []
-
-    def empty(self):
-        if not self.methods and not self.variables and not self.constructors:
-            return True
-        return False
 
 
 class CppClassVariable(CppVariable):
@@ -291,12 +296,24 @@ class CppClassVariable(CppVariable):
     def setter(self):
         return self._with_setter
 
-    def setter(self):
-        return self._with_setter
-
     @property
     def getter(self):
         return self._with_getter
+
+
+class CppClassScope:
+    def __init__(self) -> None:
+        self.methods = []
+        self.variables = []
+        self.constructors = []
+
+    def contains_variable(self, var: CppClassVariable):
+        return var in self.variables
+
+    def empty(self):
+        if not self.methods and not self.variables and not self.constructors:
+            return True
+        return False
 
 
 class CppClass:
@@ -350,6 +367,12 @@ class CppClass:
                         self._scope[scope].pop(var, None)
                         return
 
+    def has_variable(self, var: CppClassVariable):
+        for scope in self._scope:
+            if self._scope[scope].contains_variable(var):
+                return True
+        return False
+
 
     def remove_base_class(self, name: str):
         self._base_classes.pop(name, None)
@@ -371,7 +394,7 @@ class CppClass:
         vars += self._scope["protected"].variables
         vars += self._scope["private"].variables
 
-        constr = CppConstructor(vars)
+        constr = CppConstructor(args=vars, initializer_list=vars)
         self._scope[scope].constructors.append(constr)
 
 
