@@ -422,13 +422,21 @@ class CppFunction:
 
         fdc_str = f"<static><virtual><constexpr>{str(self._ret_t)} {self._name}({self._get_arg_list()})<const><noexcept><override> {{\n<body>\n}}"
 
+        tmp_body = None
+        if not self._body and self._ret_t._name != CppVoid()._name:
+            tmp_body = "return {};"
+
         fdc_str = fdc_str.replace("<static>", "static " if self._static else "")
         fdc_str = fdc_str.replace("<constexpr>", " constexpr " if self._constexpr else "")
-        fdc_str = fdc_str.replace("<body>", self._body if self._body else "")
         fdc_str = fdc_str.replace("<noexcept>", " noexcept" if self._noexcept else "")
         fdc_str = fdc_str.replace("<const>", " const" if self._const else "")
         fdc_str = fdc_str.replace("<virtual>", "virtual " if self._virtual else "")
         fdc_str = fdc_str.replace("<override>", " override" if self._override else "")
+
+        if self._body:
+            fdc_str = fdc_str.replace("<body>", self._body)
+        else:
+            fdc_str = fdc_str.replace("<body>", tmp_body if tmp_body else "")
 
         return fdc_str
 
@@ -617,8 +625,16 @@ class CppClassScope:
         return self
 
 
-    def add_override_method(self, name: str):
-        #TODO: сделать автоматический поиск виртуального метода у базовых классов и подобрать имплементацию
+    def add_override_method(self, name: str, body: str = ''):
+        method: CppFunction = self._contained_class.find_virtual_in_base_classes(name)
+        if not method:
+            return self
+
+        overrided = CppFunction(method.name, method.return_type, method._args, body, static=method.static
+                                , constexpr=method.constexpr, noexcept=method.noexcept, const=method.const
+                                , override=True, virtual=False, implementation=True)
+
+        self._methods.append(overrided)
         return self
 
 
@@ -660,6 +676,45 @@ class CppClass:
         self._protected_scope = CppClassScope(self)
         self._private_scope = CppClassScope(self)
         self._base_classes = {}
+
+
+    def find_virtual_in_base_class(self, function_name: str, base_class_name: str):
+        base_class_dict = self.get_base_class(base_class_name)
+        if not base_class_dict:
+            return None
+
+        base_class: CppClass = base_class_dict["class"]
+
+        def search_method(name, method_list: CppFunctionList):
+            for method in method_list:
+                if name == method.name and method.virtual:
+                    return method
+            return None
+
+        public_methods = base_class.public._methods
+        res = search_method(function_name, public_methods)
+        if res:
+            return res;
+
+        protected_methods = base_class.protected._methods
+        res = search_method(function_name, protected_methods)
+        if res:
+            return res;
+
+        private_methods = base_class.private._methods
+        res = search_method(function_name, private_methods)
+        if res:
+            return res;
+
+        return None
+
+
+    def find_virtual_in_base_classes(self, function_name: str):
+        for base_class_name in self._base_classes:
+            res = self.find_virtual_in_base_class(function_name, base_class_name)
+            if res:
+                return res
+        return None
 
 
     def get_class_type(self):
