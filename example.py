@@ -13,5 +13,5 @@ animalClass.public \
 print(animalClass.gen_definition_str())
 
 
-# catClass = CppClass('Cat')
-# catClass.add_base_class(animalClass).public.add_override_method('say')
+catClass = CppClass('Cat')
+catClass.add_base_class(animalClass)

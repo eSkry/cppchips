@@ -305,16 +305,11 @@ class CppVariable():
 
 
     @property
-    def var_static_const(self) -> str:
-        return f'static const {self._type.type} {self._name}'
-
-
-    @property
     def var(self) -> str:
         if self._static:
             return f'{self.var_static}'
 
-        return f'{self._type.type} {self._name}'
+        return f'{self.var_type.type} {self._name}'
 
 
     def definition(self) -> str:
@@ -575,16 +570,16 @@ class CppClassScope:
             getter = CppFunction(_getGetterPrfixForVariable(variable), CppAuto(reference=True), body=f'return {_getClassPrefixedVariableName(variable)};', noexcept=True)
             const_gettter = CppFunction(_getGetterPrfixForVariable(variable), CppAuto(reference=True, const=True), body=f'return {_getClassPrefixedVariableName(variable)};', noexcept=True, const=True)
 
-            self._add_method(getter)
-            self._add_method(const_gettter)
+            self._methods.append(getter)
+            self._methods.append(const_gettter)
         elif isinstance(variable, CppVariable):
             ret_t_const_ref = CppType(variable.var_type.type_clear, reference=True, const=True)
             ret_t_ref = CppType(variable.var_type.type_clear, reference=True)
 
             getter = CppFunction(_getGetterPrfixForVariable(variable), ret_t_ref, body=f'return {_getClassPrefixedVariableName(variable)};', noexcept=True)
             const_getter = CppFunction(_getGetterPrfixForVariable(variable), ret_t_const_ref, body=f'return {_getClassPrefixedVariableName(variable)};', noexcept=True, const=True)
-            self._add_method(getter)
-            self._add_method(const_getter)
+            self._methods.append(getter)
+            self._methods.append(const_getter)
         else:
             raise Exception(f'Error add {variable} in CppClass.add_getter, function allow only string and CppVariable types.')
 
@@ -594,16 +589,17 @@ class CppClassScope:
     def add_setter(self, variable):
         '''Add setter method for target variable'''
 
+        var_obj: CppVariable = None
         if isinstance(variable, str):
-            variable: CppVariable = self._contained_class.get_variable_by_name(variable)
-            if variable == None:
+            var_obj: CppVariable = self._contained_class.get_variable_by_name(variable)
+            if var_obj == None:
                 raise Exception(f'Variable {variable} not exists for create setter.')
 
-        setter = CppFunction(_getSetterPrefixForVariable(variable), CppVoid()
-                , [CppVariable(variable.var_type.type_const_reference, _getPrefixedVariableArgument(variable.name))]
-                , f'{_getClassPrefixedVariableName(variable.name)} = {_getPrefixedVariableArgument(variable.name)};')
+        setter = CppFunction(_getSetterPrefixForVariable(var_obj.name), CppVoid()
+                , [CppVariable(CppType(var_obj.var_type._name, const=True, reference=True), _getPrefixedVariableArgument(var_obj.name))]
+                , f'{_getClassPrefixedVariableName(var_obj.name)} = {_getPrefixedVariableArgument(var_obj.name)};')
 
-        self._add_method(setter)
+        self._methods.append(setter)
         return self
 
 
