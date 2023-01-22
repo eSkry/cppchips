@@ -1,5 +1,6 @@
 from typing import List
 
+
 CLASS_MEMBER_PREFIX='m'
 FUNCTION_ARGUMENT_PREFIX='a'
 GETTER_PREFIX="get"
@@ -7,18 +8,46 @@ SETTER_PREFIX="set"
 DEFAULT_STRING_TYPE="std::string"
 
 
-class CppDefDeclInterface:
-    '''Класс интерфейс для всех типов которые имеют декларацию и дефиницию.'''
+def _getClassPrefixedVariableName(variable_name: str) -> str:
+    return f'{CLASS_MEMBER_PREFIX}{variable_name}'
+
+
+def _getPrefixedVariableArgument(variable_name: str) -> str:
+    return f'{FUNCTION_ARGUMENT_PREFIX}{variable_name}'
+
+
+def _getSetterPrefixForVariable(variable_name: str) -> str:
+    return f'{SETTER_PREFIX}{variable_name}'
+
+
+def _getGetterPrfixForVariable(variable_name: str) -> str:
+    return f'{GETTER_PREFIX}{variable_name}'
+
+
+class CppNamespace:
+    def __init__(self, name: str) -> None:
+        self._name = name
+        self._namespaces = {}
+
+
+    def namespace_path(self):
+        return self.name
+
+
+    def get_namespace(self, namespace_name: str):
+        return self._namespaces[namespace_name]
+
+
+    def add_namespace(self, namespace_name: str):
+        self._namespaces[namespace_name, CppNamespace(namespace_name)]
+        return self
+
+
+class GlobalNamespace(CppNamespace):
     def __init__(self) -> None:
-        pass
+        super().__init__('')
 
-
-    def declaration(self) -> str:
-        return 'Error: Declaration not implemented.'
-
-
-    def definition(self) -> str:
-        return 'Error: Definition not implemented.'
+gnamespace = GlobalNamespace()
 
 
 class CppType():
@@ -154,29 +183,29 @@ class CppVoid(CppType):
 
 
 class TypeWithUnsigned(CppType):
-    def __init__(self, name: str, description=None, reference=False, pointer=False, unsigned=False):
-        super().__init__(name, description, reference, pointer)
+    def __init__(self, name: str, description=None, reference=False, pointer=False, unsigned=False, const=False):
+        super().__init__(name, description, reference, pointer, const=const)
         self._unsigned = unsigned
 
 
     @property
-    def _unsigned(self):
+    def unsigned(self):
         return self._unsigned
 
 
-    @_unsigned.setter
-    def _unsigned(self, value: bool):
+    @unsigned.setter
+    def unsigned(self, value: bool):
         self._unsigned = value
 
 
     @property
     def type_unsigned(self):
-        return f'unsigned {self.type}'
+        return f'unsigned {super().type}'
 
 
     @property
     def type_signed(self):
-        return f'{self.type}'
+        return f'{super().type}'
 
 
     @property
@@ -187,42 +216,52 @@ class TypeWithUnsigned(CppType):
 
 
 class CppChar(TypeWithUnsigned):
-    def __init__(self, reference=False, pointer=False, unsigned=False):
-        super().__init__(name='char', description='char type', reference=reference, pointer=pointer, unsigned=unsigned)
+    def __init__(self, reference=False, pointer=False, unsigned=False, const=False):
+        super().__init__(name='char', description='char type', reference=reference, pointer=pointer, unsigned=unsigned, const=const)
 
 
 class CppInt(TypeWithUnsigned):
-    def __init__(self, reference=False, pointer=False, unsigned=False) -> None:
-        super().__init__(name='int', description='int type', reference=reference, pointer=pointer, unsigned=unsigned)
+    def __init__(self, reference=False, pointer=False, unsigned=False, const=False) -> None:
+        super().__init__(name='int', description='int type', reference=reference, pointer=pointer, unsigned=unsigned, const=const)
 
 
 class CppFloat(TypeWithUnsigned):
-    def __init__(self, reference=False, pointer=False, unsigned=False):
-        super().__init__(name='float', description='float type', reference=reference, pointer=pointer, unsigned=unsigned)
+    def __init__(self, reference=False, pointer=False, unsigned=False, const=False):
+        super().__init__(name='float', description='float type', reference=reference, pointer=pointer, unsigned=unsigned, const=const)
 
 
 class CppDouble(TypeWithUnsigned):
-    def __init__(self, reference=False, pointer=False, unsigned=False):
-        super().__init__(name='double', description='double type', reference=reference, pointer=pointer, unsigned=unsigned)
+    def __init__(self, reference=False, pointer=False, unsigned=False, const=False):
+        super().__init__(name='double', description='double type', reference=reference, pointer=pointer, unsigned=unsigned, const=const)
 
 
 class CppString(CppType):
-    def __init__(self, reference=False, pointer=False):
-        super().__init__(DEFAULT_STRING_TYPE, 'C++ string type', reference, pointer)
+    def __init__(self, reference=False, pointer=False, const=False):
+        super().__init__(DEFAULT_STRING_TYPE, 'C++ string type', reference, pointer, const=const)
 
 
 class CppAuto(CppType):
-    def __init__(self, reference=False, pointer=False, rvalue_ref=False):
-        super().__init__('auto', 'c++ auto type', reference, pointer, rvalue_ref)
+    def __init__(self, reference=False, pointer=False, rvalue_ref=False, const=False):
+        super().__init__('auto', 'c++ auto type', reference, pointer, rvalue_ref, const=const)
+
+
+class CppBool(CppType):
+    def __init__(self, reference=False, pointer=False, rvalue_ref=False, const=False):
+        super().__init__('bool', 'c++ boolean type', reference, pointer, rvalue_ref, const)
 
 
 class CppNONE(CppType):
     '''CppNONE - Тип заглушка. Необходим для использования в конструкторах класса'''
+
+
     def __init__(self):
         super().__init__('')
 
 
 class CppVariable():
+    '''Класс CppVariable является представлением сущности переменной в C++'''
+
+
     def __init__(self, type: CppType, name: str, value=None, static=False) -> None:
         self._type = type
         self._name = name
@@ -278,7 +317,6 @@ class CppVariable():
         return f'{self._type.type} {self._name}'
 
 
-    @property
     def definition(self) -> str:
         if not self._value:
             return f'{self._type.type} {self._name};'
@@ -286,7 +324,13 @@ class CppVariable():
         return f'{self._type.type} {self._name} = {str(self._value)};'
 
 
-    @property
+    def definition_in_class(self) -> str:
+        if not self._value:
+            return f'{self._type.type} {_getClassPrefixedVariableName(self._name)};'
+
+        return f'{self._type.type} {_getClassPrefixedVariableName(self._name)} = {str(self._value)};'
+
+
     def declaration(self):
         return f'{self._type.type} {self._name};'
 
@@ -299,7 +343,7 @@ class CppFunction:
     '''CppFunction - Клас который представляет собой функции и методы из C++'''
 
 
-    def __init__(self, name: str, ret_t: CppType, args: CppVariableList = [], body=None, static=False, constexpr=False, noexcept=False, const=False):
+    def __init__(self, name: str, ret_t: CppType, args: CppVariableList = [], body=None, static=False, constexpr=False, noexcept=False, const=False, override=False, virtual=False, implementation=True):
         self._name = name
         self._ret_t = ret_t
         self._args = args
@@ -308,6 +352,49 @@ class CppFunction:
         self._body = body
         self._noexcept = noexcept
         self._const = const
+        self._virtual = virtual
+        self._override = override
+        self._implementation = implementation
+
+
+    @property
+    def implement(self) -> bool:
+        return self._implementation
+
+
+    @property
+    def virtual(self) -> bool:
+        return self._virtual
+
+
+    @property
+    def override(self) -> bool:
+        return self._override
+
+
+    @property
+    def static(self) -> bool:
+        return self._static
+
+
+    @property
+    def constexpr(self) -> bool:
+        return self._constexpr
+
+
+    @property
+    def noexcept(self) -> bool:
+        return self._noexcept
+
+
+    @property
+    def const(self) -> bool:
+        return self._const
+
+
+    @property
+    def name(self) -> str:
+        return self._name
 
 
     @property
@@ -338,24 +425,29 @@ class CppFunction:
         '''get_definition - Определяет функцию вместе с ее телом'''
 
 
-        fdc_str = f"<static><constexpr>{str(self._ret_t)} {self._name}({self._get_arg_list()})<const><noexcept> {{\n<body>\n}}"
+        fdc_str = f"<static><virtual><constexpr>{str(self._ret_t)} {self._name}({self._get_arg_list()})<const><noexcept><override> {{\n<body>\n}}"
 
         fdc_str = fdc_str.replace("<static>", "static " if self._static else "")
-        fdc_str = fdc_str.replace("<constexpr>", "constexpr " if self._constexpr else "")
+        fdc_str = fdc_str.replace("<constexpr>", " constexpr " if self._constexpr else "")
         fdc_str = fdc_str.replace("<body>", self._body if self._body else "")
         fdc_str = fdc_str.replace("<noexcept>", " noexcept" if self._noexcept else "")
         fdc_str = fdc_str.replace("<const>", " const" if self._const else "")
+        fdc_str = fdc_str.replace("<virtual>", "virtual " if self._virtual else "")
+        fdc_str = fdc_str.replace("<override>", " override" if self._override else "")
 
         return fdc_str
 
 
     def declaration(self) -> str:
-        fdf_str = f"<static><constexpr>{str(self._ret_t)} {self._name}({self._get_arg_list()})<const><noexcept>;"
+        fdf_str = f"<static><virtual><constexpr>{str(self._ret_t)} {self._name}({self._get_arg_list()})<const><noexcept><override><deleted>;"
 
         fdf_str = fdf_str.replace("<static>", "static " if self._static else "")
-        fdf_str = fdf_str.replace("<constexpr>", "constexpr " if self._constexpr else "")
+        fdf_str = fdf_str.replace("<constexpr>", " constexpr " if self._constexpr else "")
         fdf_str = fdf_str.replace("<noexcept>", " noexcept" if self._noexcept else "")
         fdf_str = fdf_str.replace("<const>", " const" if self._const else "")
+        fdf_str = fdf_str.replace("<virtual>", " virtual" if self._virtual else "")
+        fdf_str = fdf_str.replace("<override>", " override" if self._override else "")
+        fdf_str = fdf_str.replace("<deleted>", " = 0" if not self._implementation else "")
 
         return fdf_str
 
@@ -368,11 +460,21 @@ CppFunctionList = List[CppFunction]
 
 
 class CppConstructor(CppFunction):
-    def __init__(self, args: CppVariableList = [], body=None, constexpr=False, deleted=False, default=False, initializer_list: CppVariableList = []):
+    def __init__(self, args: CppVariableList = [], body=None, constexpr=False, deleted=False, default=False):
         super().__init__('', CppNONE(), args, body, constexpr)
-        self.deleted = deleted
-        self.default = default
-        self.initializer_list = initializer_list
+        self._deleted = deleted
+        self._default = default
+        self._args = args
+
+
+    @property
+    def deleted(self) -> bool:
+        return self._deleted
+
+
+    @property
+    def default(self) -> bool:
+        return self._default
 
 
     def arg_count(self):
@@ -389,17 +491,18 @@ class CppConstructor(CppFunction):
         fdc_str = fdc_str.replace("<body>", self._body if self._body else "")
         fdc_str = fdc_str.replace("<noexcept>", " noexcept" if self._noexcept else "")
 
-        if len(self.initializer_list) > 0:
-            init_list = " : "
+        initializer_list = [x for x in self._args if x.init_on_constructor]
+
+        if initializer_list:
+            init_list_str = " : "
             # todo: Релазиовать инициализацию конструктора базового класса
-            init_strs = []
-            for arg in self._args:
-                if arg in self.initializer_list:
-                    init_strs.append(f'{arg.name}{{{arg.name}}}')
 
-            init_list += ", ".join(init_strs)
+            var_init_list = []
+            for init_var in self._args:
+                var_init_list.append(f'{init_var.name}{{{init_var.name}}}')
 
-            fdc_str = fdc_str.replace("<initializer_list>", init_list)
+            init_list_str += ", ".join(var_init_list)
+            fdc_str = fdc_str.replace("<initializer_list>", init_list_str)
         else:
             fdc_str = fdc_str.replace("<initializer_list>", "")
 
@@ -424,175 +527,248 @@ class CppConstructor(CppFunction):
 CppConstructorList = List[CppConstructor]
 
 
-class CppClassVariable(CppVariable):
-    def __init__(self, type: CppType, name: str, value=None, static=False, with_getter=False, with_setter=False) -> None:
-        super().__init__(type, name, value, static)
-        self._with_getter = with_getter
-        self._with_setter = with_setter
-
-
-    @property
-    def setter(self):
-        return self._with_setter
-
-
-    @property
-    def getter(self):
-        return self._with_getter
-
-
-CppClassVariableList = List[CppClassVariable]
-
-
 class CppClassScope:
-    def __init__(self) -> None:
-        self.methods: CppFunctionList = []
-        self.variables: CppClassVariableList  = []
-        self.constructors: CppConstructorList = []
+    def __init__(self, contained_class) -> None:
+        self._contained_class = contained_class
+        self._methods: CppFunctionList = []
+        self._variables: CppVariableList  = []
+        self._constructors: CppConstructorList = []
+        self._custom_body = ''
 
 
-    def contains_variable(self, var: CppClassVariable):
-        return var in self.variables
+    def set_custom_body(self, body):
+        self._custom_body = body
+
+
+    def _contains_variable(self, var):
+        if isinstance(var, str):
+            for varobj in self._variables:
+                if varobj.name == var:
+                    return True
+
+        return var in self._variables
+
+
+    def _get_variable(self, var_name: str):
+        for varobj in self._variables:
+            if varobj.name == var_name:
+                return varobj
+
+        return None
+
+
+    def _add_variable(self, var: CppVariable):
+        self._variables.append(var)
+        return self
+
+
+    def add_variable(self, type: CppType, name: str, value=None, static=False):
+        var = CppVariable(type, name, value, static)
+        self._variables.append(var)
+        return self
+
+
+    def add_getter(self, variable):
+        '''Add getter method for target variable'''
+
+        if isinstance(variable, str):
+            getter = CppFunction(_getGetterPrfixForVariable(variable), CppAuto(reference=True), body=f'return {_getClassPrefixedVariableName(variable)};', noexcept=True)
+            const_gettter = CppFunction(_getGetterPrfixForVariable(variable), CppAuto(reference=True, const=True), body=f'return {_getClassPrefixedVariableName(variable)};', noexcept=True, const=True)
+
+            self._add_method(getter)
+            self._add_method(const_gettter)
+        elif isinstance(variable, CppVariable):
+            ret_t_const_ref = CppType(variable.var_type.type_clear, reference=True, const=True)
+            ret_t_ref = CppType(variable.var_type.type_clear, reference=True)
+
+            getter = CppFunction(_getGetterPrfixForVariable(variable), ret_t_ref, body=f'return {_getClassPrefixedVariableName(variable)};', noexcept=True)
+            const_getter = CppFunction(_getGetterPrfixForVariable(variable), ret_t_const_ref, body=f'return {_getClassPrefixedVariableName(variable)};', noexcept=True, const=True)
+            self._add_method(getter)
+            self._add_method(const_getter)
+        else:
+            raise Exception(f'Error add {variable} in CppClass.add_getter, function allow only string and CppVariable types.')
+
+        return self
+
+
+    def add_setter(self, variable):
+        '''Add setter method for target variable'''
+
+        if isinstance(variable, str):
+            variable: CppVariable = self._contained_class.get_variable_by_name(variable)
+            if variable == None:
+                raise Exception(f'Variable {variable} not exists for create setter.')
+
+        setter = CppFunction(_getSetterPrefixForVariable(variable), CppVoid()
+                , [CppVariable(variable.var_type.type_const_reference, _getPrefixedVariableArgument(variable.name))]
+                , f'{_getClassPrefixedVariableName(variable.name)} = {_getPrefixedVariableArgument(variable.name)};')
+
+        self._add_method(setter)
+        return self
+
+
+    def add_method(self, name: str, ret_t: CppType, args: CppVariableList = [], body=None, static=False, constexpr=False, noexcept=False, const=False, override=False, virtual=False, impl=True):
+        method = CppFunction(name, ret_t, args, body, static, constexpr, noexcept, const, override, virtual, impl)
+        self._methods.append(method)
+        return self
+
+
+    def add_virtual_method(self, name: str, ret_t: CppType, args: CppVariableList = [], body=None, static=False, constexpr=False, noexcept=False, const=False):
+        '''Its wrapped function add_method'''
+
+        method = CppFunction(name, ret_t, args, body, static, constexpr, noexcept, const, False, True, True)
+        self._methods.append(method)
+        return self
+
+
+    def add_override_method(self, name: str):
+        #TODO: сделать автоматический поиск виртуального метода у базовых классов и подобрать имплементацию
+        return self
+
+
+    def add_deleted_virtual_method(self, name: str, ret_t: CppType, args: CppVariableList = [], body=None, static=False, constexpr=False, noexcept=False, const=False):
+        '''Its wrapped function add_method'''
+
+        method = CppFunction(name, ret_t, args, body, static, constexpr, noexcept, const, False, True, False)
+        self._methods.append(method)
+        return self
+
+
+    def _add_method(self, method: CppFunction):
+        self._methods.append(method)
+        return self
+
+
+    def add_constructor(self, args: CppVariableList = [], body=None, constexpr=False, deleted=False, default=False):
+        constr = CppConstructor(args, body, constexpr, deleted, default)
+        self._constructors.append(constr)
+        return self
+
+
+    def _add_constructor(self, constructor: CppConstructor):
+        self._constructors.append(constructor)
+        return self
 
 
     def empty(self):
-        if not self.methods and not self.variables and not self.constructors:
+        if not self._methods and not self._variables and not self._constructors:
             return True
         return False
 
 
 class CppClass:
-    def __init__(self, name: str, base_classes={}, class_type="class") -> None:
-        self._name = name
-        self._base_classes = base_classes
-        self._type = CppType(name=name)
+    def __init__(self, name: str, class_type="class") -> None:
+        self._class_name = name
         self._class_type = class_type
+        self._public_scope = CppClassScope(self)
+        self._protected_scope = CppClassScope(self)
+        self._private_scope = CppClassScope(self)
+        self._base_classes = {}
 
-        self._scope = {"public": CppClassScope()
-                    , "protected": CppClassScope()
-                    , "private": CppClassScope()}
+
+    def get_class_type(self):
+        return CppType(self._class_name, ['User class type'])
 
 
     @property
-    def type(self):
-        return self._type
+    def name(self):
+        return self._class_name
 
 
-    def add_variable(self, var: CppClassVariable, scope="public"):
-        self._scope[scope].variables.append(var)
-        if var.getter:
-            ret_const_ref_t = CppType(var.var_type._name, reference=True, const=True)
-            ret_ref_t = CppType(var.var_type._name, reference=True)
-            self.add_method(CppFunction(GETTER_PREFIX + var.name, ret_const_ref_t, body=f'return {var.name};', noexcept=True, const=True))
-            self.add_method(CppFunction(GETTER_PREFIX + var.name, ret_ref_t, body=f'return {var.name};', noexcept=True))
-        if var.setter:
-            set_ref_t = CppType(var.var_type._name, reference=True)
-            arg = CppVariable(set_ref_t, 'value')
-            self.add_method(CppFunction(SETTER_PREFIX + var.name, CppVoid(), [arg], f'this->{var.name} = {arg.name};'))
+    @property
+    def public(self):
+        return self._public_scope
 
 
-    def add_method(self, method: CppFunction, scope="public"):
-        self._scope[scope].methods.append(method)
+    @property
+    def protected(self):
+        return self._protected_scope
 
 
-    def add_base_class(self, class_name, inheritance="public"):
-        if isinstance(class_name, str):
-            self._base_classes[class_name] = {"class_name": class_name, "inheritance": inheritance}
-        else:
-            # Предполагается что передается тип CppClass
-            self._base_classes[class_name._name] = {"class_name": class_name._name, "class": class_name, "inheritance": inheritance}
+    @property
+    def private(self):
+        return self._private_scope
 
 
-    # def remove_method(self, name: str):
-    #     self._methods.pop(name, None)
+    def get_variable_by_name(self, variable: str):
+        varobj = self._private_scope._get_variable(variable)
+        if varobj:
+            return varobj
+        varobj = self._public_scope._get_variable(variable)
+        if varobj:
+            return varobj
+        varobj = self._protected_scope._get_variable(variable)
+        if varobj:
+            return varobj
 
-    def remove_variable(self, var: str):
-        if isinstance(var, str):
-            for scope in self._scope:
-                for var in self._scope[scope].variables:
-                    if var.name == var:
-                        self._scope[scope].pop(var, None)
-                        return
-
-        if isinstance(var, CppClassVariable):
-            name = var.name
-            for scope in self._scope:
-                for var in self._scope[scope].variables:
-                    if var.name == var:
-                        self._scope[scope].pop(var, None)
-                        return
+        return None
 
 
-    def has_variable(self, var: CppClassVariable):
-        for scope in self._scope:
-            if self._scope[scope].contains_variable(var):
-                return True
-        return False
+    def add_base_class(self, base_class, inheritance_type="public"):
+        if isinstance(base_class, str):
+            bcl = CppClass(base_class)
+            self._base_classes[base_class] = {"class": bcl, "inheritance_type": inheritance_type}
+            return self
+
+        self._base_classes[base_class.name] = {"class": base_class, "inheritance_type": inheritance_type}
+        return self
 
 
-    def remove_base_class(self, name: str):
-        self._base_classes.pop(name, None)
+    def get_base_class(self, class_name: str):
+        if not class_name in self._base_classes:
+            return None
+        return self._base_classes[class_name]
 
 
-    def add_constructor(self, constructor: CppConstructor, scope="public"):
-        self._scope[scope].constructors.append(constructor)
+    def gen_definition_str(self):
+        def gen_from_scope(scope: CppClassScope) -> str:
+            if scope.empty():
+                return ""
 
+            result_str = ""
+            constructor_list = scope._constructors
+            method_list = scope._methods
+            variable_list = scope._variables
 
-    def add_empty_constructor(self, scope="public"):
-        self._scope[scope].constructors.append(CppConstructor())
+            # constructor
+            result_str += "\n".join([constructor.definition().replace("<class_name>", self._class_name) for constructor in constructor_list])
 
+            # methods
+            result_str += "\n".join([method.definition() for method in method_list])
 
-    def add_full_constructor(self, scope="public"):
-        '''Добавляет конструктор у которого количество аргументов равно количеству переменных'''
+            # variables
+            result_str += "\n".join([var.definition_in_class() for var in variable_list])
+            result_str += '\n'
+            return result_str
 
-        vars = []
-        vars += self._scope["public"].variables
-        vars += self._scope["protected"].variables
-        vars += self._scope["private"].variables
-
-        constr = CppConstructor(args=vars, initializer_list=vars)
-        self._scope[scope].constructors.append(constr)
-
-
-    def get_definition(self):
-        class_str = f'{self._class_type} {self._name}'
+        class_str = f'{self._class_type} {self._class_name}'
         if self._base_classes:
             class_str += " : "
-            b_class_list = [f'{str(self._base_classes[x]["inheritance"])} {self._base_classes[x]["class_name"]}' for x in self._base_classes]
+            b_class_list = [f'{self._base_classes[x]["inheritance_type"]} {x}' for x in self._base_classes];
             class_str += ", ".join(b_class_list)
 
         class_str += ' { '
 
+        # public scope
+        if not self._public_scope.empty():
+            class_str += "\npublic:\n"
+            class_str += gen_from_scope(self.public)
 
-        for scope_name in self._scope:
-            cur_scope = self._scope[scope_name]
-            if cur_scope.empty():
-                continue
+        # protected scope
+        if not self._protected_scope.empty():
+            class_str += "\nprotected:\n"
+            class_str += gen_from_scope(self.protected)
 
-            class_str += f'\n{scope_name}:\n'
+        # private scope
+        if not self._private_scope.empty():
+            class_str += "\nprivate:\n"
+            class_str += gen_from_scope(self.private)
 
-            # constructors
-            class_str += "\n".join([constructor.definition().replace("<class_name>", self._name) for constructor in cur_scope.constructors])
-            class_str += '\n'
-
-            # methods
-            class_str += "\n".join([method.definition() for method in cur_scope.methods])
-            class_str += '\n'
-
-            # variables
-            class_str += "\n".join([variable.definition for variable in cur_scope.variables])
-            class_str += '\n'
-
-
-        class_str += "\n};"
-
+        # end genereation
+        class_str += " }; "
         return class_str
 
 
-    def get_declaration(self):
-        pass
-
-
-    def __str__(self) -> str:
-        return self.get_definition()
+    def get_declaration_str(self):
+        return ""
 

@@ -1,32 +1,17 @@
-from src.CppType import CppType
-from src import CppBaseTypes
-from src.CppFunction import CppFunction
-from src.CppVariable import CppVariable
-from src.CppClass import CppClass
+from src.cppchips import *
 
 
-# CppType
-cppType1 = CppType('MyClassName', const=True)
-print(cppType1) # const MyClassName
-cppType1.is_pointer = True
-print(cppType1) # const MyClassName*
+animalClass = CppClass('Animal')
+animalClass.public \
+                .add_virtual_method('say', CppVoid(), [], 'std::cout << "---\\n";', noexcept=True) \
+                .add_constructor() \
+                .add_variable(CppString(), 'var1') \
+                .add_getter('var1') \
+                .add_setter('var1')
 
 
-# CppVariable
-cppVar = CppVariable(cppType1, 'myVar', value="fdsf")
-print(cppVar) # const MyClassName* myVar = fdsf
+print(animalClass.gen_definition_str())
 
 
-print(CppFunction('HelloFunction'
-                        , CppBaseTypes.CppInt()
-                        , [CppVariable(CppBaseTypes.CppFloat(const=True, reference=True), name='arg1')]
-                        , body='auto shrd = std::make_shared<int>();').get_declaration_string())
-
-
-
-clB = CppClass('BaseClass')
-cl = CppClass('HelloClass')
-cl.add_base_class(clB, "public")
-
-
-print(str(cl))
+# catClass = CppClass('Cat')
+# catClass.add_base_class(animalClass).public.add_override_method('say')
