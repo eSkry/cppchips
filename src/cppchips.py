@@ -485,10 +485,10 @@ class CppConstructor(CppFunction):
 
 
     def definition(self) -> str:
-        if self.deleted or self.default:
-            return ""
+        if self._deleted or self._default:
+            return self.declaration()
 
-        fdc_str = f"<constexpr>{str(self._ret_t)} <class_name>({self._get_arg_list()})<noexcept> <initializer_list>{{\n<body>\n}}"
+        fdc_str = f"<constexpr> <class_name>({self._get_arg_list()})<noexcept> <initializer_list>{{\n<body>\n}}"
 
         fdc_str = fdc_str.replace("<constexpr>", "constexpr" if self._constexpr else "")
         fdc_str = fdc_str.replace("<body>", self._body if self._body else "")
@@ -516,8 +516,8 @@ class CppConstructor(CppFunction):
         fdf_str = f"<constexpr> <class_name>({self._get_arg_list()})<noexcept><deleted><default>;"
 
         fdf_str = fdf_str.replace("<constexpr>", "constexpr" if self._constexpr else "")
-        fdf_str = fdf_str.replace("<deleted>", " = deleted;" if self.deleted else "")
-        fdf_str = fdf_str.replace("<default>", " = default;" if self.default else "")
+        fdf_str = fdf_str.replace("<deleted>", " = deleted" if self.deleted else "")
+        fdf_str = fdf_str.replace("<default>", " = default" if self.default else "")
         fdf_str = fdf_str.replace("<noexcept>", " noexcept" if self._noexcept else "")
 
         return fdf_str
