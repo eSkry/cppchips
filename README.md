@@ -1,12 +1,14 @@
 # cppchips: C++17 code generator
 
+#### :exclamation: Early development stage :vertical_traffic_light:
+
 ![a](https://img.shields.io/github/commit-activity/y/eSkry/cppchips?style=flat-square) ![license](https://img.shields.io/github/license/eSkry/cppchips?style=flat-square)
 
 --------------------------------------
 
-Languages: **EN** [RU](docs/README.ru.md)
+#### :capital_abcd: Languages: **EN** [RU](docs/README.ru.md)
 
-#### Supported C++ constructions
+#### :four_leaf_clover: Supported C++ constructions
 - **class** and **struct**.
 - **class constructors**.
 - **class member fields** - with autogeneration getter and setter.
@@ -16,7 +18,7 @@ Languages: **EN** [RU](docs/README.ru.md)
 - simple functions, variables.
 
 
-## Feature overview
+## :rocket: Simple start
 
 **cppchips input**:
 ```python

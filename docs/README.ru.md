@@ -1,13 +1,15 @@
 # cppchips: Автогенератор кода C++17
 
+#### :exclamation: В ранней стадии разработки :vertical_traffic_light:
+
 ![a](https://img.shields.io/github/commit-activity/y/eSkry/cppchips?style=flat-square) ![license](https://img.shields.io/github/license/eSkry/cppchips?style=flat-square)
 
 --------------------------------------
 
-Языки: [EN](../README.md) **RU**
+#### :capital_abcd: Языки: [EN](../README.md) **RU**
 
 
-## Поддерживаемые конструкции C++
+## :four_leaf_clover: Поддерживаемые конструкции C++
 - **class** и **struct**.
 - **class constructors**.
 - **Переменные класса** - with autogeneration getter and setter.
@@ -17,7 +19,7 @@
 - виртуальные функции и их перегрузка.
 
 
-## Быстрый старт
+## :rocket: Быстрый старт
 **Описание на cppchips**:
 ```python
 from src.cppchips import *
