@@ -16,6 +16,7 @@
 - **class member functions**.
 - **virtual** functions and **override in child classes**.
 - simple functions, variables.
+- **method overloading**
 
 
 ## :rocket: Simple start

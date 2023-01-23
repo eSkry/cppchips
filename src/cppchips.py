@@ -50,6 +50,16 @@ class GlobalNamespace(CppNamespace):
 gnamespace = GlobalNamespace()
 
 
+class CppFuncDescription:
+    def __init__(self, description) -> None:
+        self._description = description
+
+
+    @property
+    def description(self):
+        return self._description
+
+
 class CppType():
     def __init__(self, name: str, description=None, reference=False, pointer=False, rvalue_ref=False, const=False):
         self._name = name
@@ -166,8 +176,11 @@ class CppType():
         return self.type_clear
 
 
-    def __str__(self) -> str:
-        return self.type
+    def __eq__(self, __o: object) -> bool:
+        if isinstance(__o, CppType):
+            return self.type == __o.type
+
+        return False
 
 
 class CppVoid(CppType):
@@ -330,6 +343,15 @@ class CppVariable():
         return f'{self._type.type} {self._name};'
 
 
+class CppStringVar(CppVariable):
+    def __init__(self, name: str, value=None, static=False, reference=False, pointer=False, const=False) -> None:
+        super().__init__(CppString(reference=reference, pointer=pointer, const=const), name, value, static)
+
+    @property
+    def value(self):
+        return f'"{super().value}"'
+
+
 # Типизированный список переменных
 CppVariableList = List[CppVariable]
 
@@ -338,7 +360,7 @@ class CppFunction:
     '''CppFunction - Клас который представляет собой функции и методы из C++'''
 
 
-    def __init__(self, name: str, ret_t: CppType, args: CppVariableList = [], body=None, static=False, constexpr=False, noexcept=False, const=False, override=False, virtual=False, implementation=True):
+    def __init__(self, name: str, ret_t: CppType, args: CppVariableList = [], body=None, static=False, constexpr=False, noexcept=False, const=False, override=False, virtual=False, delete=True):
         self._name = name
         self._ret_t = ret_t
         self._args = args
@@ -349,12 +371,18 @@ class CppFunction:
         self._const = const
         self._virtual = virtual
         self._override = override
-        self._implementation = implementation
+        self._delete = delete
 
 
     @property
-    def implement(self) -> bool:
-        return self._implementation
+    def args_signature(self) -> str:
+        if self._args:
+            return ";;".join([arg.var_type.type for arg in self.args])
+
+
+    @property
+    def delete(self) -> bool:
+        return self._delete
 
 
     @property
@@ -419,8 +447,10 @@ class CppFunction:
     def definition(self) -> str:
         '''get_definition - Определяет функцию вместе с ее телом'''
 
+        if not self._delete:
+            return self.declaration()
 
-        fdc_str = f"<static><virtual><constexpr>{str(self._ret_t)} {self._name}({self._get_arg_list()})<const><noexcept><override> {{\n<body>\n}}"
+        fdc_str = f"<static><virtual><constexpr> {self._ret_t.type} {self._name}({self._get_arg_list()})<const><noexcept><override> {{\n<body>\n}}"
 
         tmp_body = None
         if not self._body and self._ret_t._name != CppVoid()._name:
@@ -442,7 +472,7 @@ class CppFunction:
 
 
     def declaration(self) -> str:
-        fdf_str = f"<static><virtual><constexpr>{str(self._ret_t)} {self._name}({self._get_arg_list()})<const><noexcept><override><deleted>;"
+        fdf_str = f"<static><virtual><constexpr> {self._ret_t.type} {self._name}({self._get_arg_list()})<const><noexcept><override><deleted>;"
 
         fdf_str = fdf_str.replace("<static>", "static " if self._static else "")
         fdf_str = fdf_str.replace("<constexpr>", " constexpr " if self._constexpr else "")
@@ -450,7 +480,7 @@ class CppFunction:
         fdf_str = fdf_str.replace("<const>", " const" if self._const else "")
         fdf_str = fdf_str.replace("<virtual>", " virtual" if self._virtual else "")
         fdf_str = fdf_str.replace("<override>", " override" if self._override else "")
-        fdf_str = fdf_str.replace("<deleted>", " = 0" if not self._implementation else "")
+        fdf_str = fdf_str.replace("<deleted>", " = 0" if not self._delete else "")
 
         return fdf_str
 
@@ -536,7 +566,7 @@ class CppClassScope:
         self._methods: CppFunctionList = []
         self._variables: CppVariableList  = []
         self._constructors: CppConstructorList = []
-        self._custom_body = ''
+        self._custom_body: str = None
 
 
     def set_custom_body(self, body):
@@ -599,7 +629,7 @@ class CppClassScope:
 
         var_obj: CppVariable = None
         if isinstance(variable, str):
-            var_obj: CppVariable = self._contained_class.get_variable_by_name(variable)
+            var_obj: CppVariable = self._contained_class.find_variable_by_name(variable)
             if var_obj == None:
                 raise Exception(f'Variable {variable} not exists for create setter.')
 
@@ -625,16 +655,36 @@ class CppClassScope:
         return self
 
 
-    def add_override_method(self, name: str, body: str = ''):
-        method: CppFunction = self._contained_class.find_virtual_in_base_classes(name)
+    def add_override_method(self, name: str, body: str = None):
+        methods: CppFunctionList = self._contained_class.find_methods_in_base_classes({"virtual": True, "name": name})
+        if not methods:
+            return self
+
+        method = methods[0]
         if not method:
             return self
 
         overrided = CppFunction(method.name, method.return_type, method._args, body, static=method.static
                                 , constexpr=method.constexpr, noexcept=method.noexcept, const=method.const
-                                , override=True, virtual=False, implementation=True)
+                                , override=True, virtual=False, delete=True)
 
         self._methods.append(overrided)
+        return self
+
+
+    def add_overload_base_method(self, name: str, args: CppVariableList = [], body: str = None):
+        methods: CppFunctionList = self._contained_class.find_methods_in_base_classes({"name": name})
+        if not methods:
+            return self
+
+        method = methods[0]
+        if not method:
+            return self
+
+        overloaded = CppFunction(method.name, method.return_type, args, body, method.static, method.constexpr, method.noexcept
+                                 , method.const, method.override, method.virtual, method.delete)
+
+        self._methods.append(overloaded)
         return self
 
 
@@ -643,6 +693,11 @@ class CppClassScope:
 
         method = CppFunction(name, ret_t, args, body, static, constexpr, noexcept, const, False, True, False)
         self._methods.append(method)
+        return self
+
+
+    def set_body(self, body_text: str):
+        self._custom_body = body_text
         return self
 
 
@@ -668,6 +723,10 @@ class CppClassScope:
         return False
 
 
+def _basic_mach_object_by_attributes(object, attributes: dict) -> bool:
+    return all([getattr(object, attr_name) == attributes[attr_name] for attr_name in attributes])
+
+
 class CppClass:
     def __init__(self, name: str, class_type="class") -> None:
         self._class_name = name
@@ -678,43 +737,71 @@ class CppClass:
         self._base_classes = {}
 
 
-    def find_virtual_in_base_class(self, function_name: str, base_class_name: str):
-        base_class_dict = self.get_base_class(base_class_name)
-        if not base_class_dict:
-            return None
-
-        base_class: CppClass = base_class_dict["class"]
-
-        def search_method(name, method_list: CppFunctionList):
-            for method in method_list:
-                if name == method.name and method.virtual:
-                    return method
-            return None
-
-        public_methods = base_class.public._methods
-        res = search_method(function_name, public_methods)
-        if res:
-            return res;
-
-        protected_methods = base_class.protected._methods
-        res = search_method(function_name, protected_methods)
-        if res:
-            return res;
-
-        private_methods = base_class.private._methods
-        res = search_method(function_name, private_methods)
-        if res:
-            return res;
-
-        return None
-
-
-    def find_virtual_in_base_classes(self, function_name: str):
+    def find_methods_in_base_classes(self, search_tags: dict):
+        result = []
         for base_class_name in self._base_classes:
-            res = self.find_virtual_in_base_class(function_name, base_class_name)
-            if res:
-                return res
-        return None
+            result += self._find_methods_in_class(self._base_classes[base_class_name]["class"], search_tags)
+        return result
+
+
+    def find_methods_in_base_class(self, class_name: str, search_tags: dict):
+        if not class_name in self._base_classes:
+            return []
+
+        return self._find_methods_in_class(self._base_classes[class_name]["class"], search_tags)
+
+
+    def find_methods(self, search_tags: dict):
+        return self._find_methods_in_class(self, search_tags)
+
+
+    def _find_methods_in_class(self, class_obj, search_tags: dict):
+        '''
+        Функция выполняет поиск методов класса, подходящих под описание тегами.
+        Словарь search_tags имеет следующий вид: {"tag_name": "value"}}.
+
+        Пример запроса 1: {"name": "foo", "virtual": True}.
+        Пример запроса 2: {"name": "foo", "virtual": True, "const": True}}
+        '''
+
+        result = []
+
+        scope_list = [class_obj._public_scope, class_obj._private_scope, class_obj._protected_scope]
+        for scope in scope_list:
+            method_list = scope._methods
+            for method in method_list:
+                if _basic_mach_object_by_attributes(method, search_tags):
+                    result.append(method)
+        return result
+
+
+    def find_constructor_in_base_classes(self, search_tags: dict):
+        result = []
+
+        for base_class_name in self._base_classes:
+            result += self.find_constructor_in_base_class(base_class_name, search_tags)
+
+        return result
+
+
+    def find_constructor_in_base_class(self, class_name: str, search_tags: dict):
+        if not class_name in self._base_classes:
+            return []
+
+        return self._find_constructor_in_class(self._base_classes[class_name]["class"], search_tags)
+
+
+    def _find_constructor_in_class(self, class_obj, search_tags: dict):
+        result = []
+
+        scope_list = [class_obj._public_scope, class_obj._private_scope, class_obj._protected_scope]
+        for scope in scope_list:
+            constructor_list = scope._constructors
+            for constructor in constructor_list:
+                if _basic_mach_object_by_attributes(constructor, search_tags):
+                    result.append(constructor)
+
+        return result
 
 
     def get_class_type(self):
@@ -741,17 +828,13 @@ class CppClass:
         return self._private_scope
 
 
-    def get_variable_by_name(self, variable: str):
-        varobj = self._private_scope._get_variable(variable)
-        if varobj:
-            return varobj
-        varobj = self._public_scope._get_variable(variable)
-        if varobj:
-            return varobj
-        varobj = self._protected_scope._get_variable(variable)
-        if varobj:
-            return varobj
-
+    def find_variable_by_name(self, name: str):
+        scope_list = [self._private_scope, self._public_scope, self._protected_scope]
+        for scope in scope_list:
+            variable_list = scope._variables
+            for var in variable_list:
+                if _basic_mach_object_by_attributes(var, {"name": name}):
+                    return var
         return None
 
 
@@ -777,6 +860,10 @@ class CppClass:
                 return ""
 
             result_str = ""
+
+            if scope._custom_body:
+                result_str += f"\n{scope._custom_body}\n"
+
             constructor_list = scope._constructors
             method_list = scope._methods
             variable_list = scope._variables
@@ -795,7 +882,7 @@ class CppClass:
         class_str = f'{self._class_type} {self._class_name}'
         if self._base_classes:
             class_str += " : "
-            b_class_list = [f'{self._base_classes[x]["inheritance_type"]} {x}' for x in self._base_classes];
+            b_class_list = [f'{self._base_classes[x]["inheritance_type"]} {x}' for x in self._base_classes]
             class_str += ", ".join(b_class_list)
 
         class_str += ' { '
@@ -823,3 +910,77 @@ class CppClass:
     def get_declaration_str(self):
         return ""
 
+
+from enum import Enum
+
+class DumpType(Enum):
+    DECLARATION = 0
+    DEFINITION = 1
+
+
+class DumpScopeType(Enum):
+    INSIDE_CLASS = 0
+    OUTSIDE_CLASS = 1
+
+
+def __dumpCppType(object: CppType) -> str:
+    return object.type
+
+
+def __dumpCppVariable(object: CppVariable, type: DumpType, scopeType: DumpScopeType):
+    result_str = ""
+    if object.static:
+        result_str += "static "
+
+    result_str += f'{__dumpCppType(object.var_type)} {object.name}'
+    if type == DumpType.DECLARATION and object.value:
+        result_str += str(object.value)
+    result_str += ";"
+
+    return result_str
+
+
+def __dumpCppVariableAsArg(object: CppVariable) -> str:
+    return f'{__dumpCppType(object.var_type)} {object.name}'
+
+
+def __dumpCppVariableInClass(object: CppVariable, type: DumpType, scopeType: DumpScopeType) -> str:
+    result_str = ""
+    if object.static:
+        result_str += "static "
+
+    result_str += f'{__dumpCppType(object.var_type)} '
+    if type == DumpType.DEFINITION and scopeType.INSIDE_CLASS:
+        result_str += f'{_getClassPrefixedVariableName(object.name)};'
+    elif type == DumpType.DECLARATION and scopeType.INSIDE_CLASS:
+        result_str += f'{_getClassPrefixedVariableName(object.name)}'
+        if object.value:
+            result_str += f" = {object.value};"
+        else:
+            result_str += ";"
+    elif scopeType.OUTSIDE_CLASS:
+        result_str += f'<class_name>::{_getClassPrefixedVariableName(object.name)}'
+        if object.value:
+            result_str += f" = {object.value};"
+        else:
+            result_str += ";"
+
+    return result_str
+
+
+def __dumpCppFunction(object: CppFunction, type: DumpType, scopeType: DumpScopeType) -> str:
+    pass
+
+
+def __dumpCppFunctionInClass(object: CppFunction, type: DumpType, scopeType: DumpScopeType) -> str:
+    pass
+
+
+def CppDump(object, type: DumpType = DumpType.DEFINITION, scopeType: DumpScopeType = DumpScopeType.INSIDE_CLASS) -> str:
+    if isinstance(object, CppType):
+        return __dumpCppType(object)
+
+    if isinstance(object, CppVariable):
+        return __dumpCppVariable(object, type, scopeType)
+
+    raise Exception("Unknown type for dump!")
